@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Code Autopsy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 10 10%22><circle cx=%225%22 cy=%225%22 r=%224%22 fill=%22%23e5172f%22/></svg>">
+<link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="autopsy.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="dot"></span>CODE AUTOPSY <small>médecine légale pour dépôts de code</small></div>
+  <div class="spacer"></div>
+  <span id="projName" class="mono muted"></span>
+  <a class="btn ghost sm" id="mdBtn" hidden>⬇ Rapport .md</a>
+  <button class="btn ghost sm" id="newBtn" hidden>＋ Nouvelle autopsie</button>
+</header>
+
+<!-- ACCUEIL -->
+<main class="wrap" id="home">
+  <section class="hero">
+    <div class="kicker">Morgue logicielle</div>
+    <h1>Déposez un projet sur la table.<br><span class="red">On trouve ce qui l'a tué.</span></h1>
+    <p class="muted">Complexité cyclomatique, fonctions-fleuves, code dupliqué, failles (eval, injections shell, secrets en dur, XSS…), code mort,
+      et grâce à l'historique Git : les <b>points chauds</b> — les fichiers à la fois complexes et sans cesse modifiés, là où naissent les bugs.</p>
+  </section>
+  <div class="grid g3">
+    <div class="card"><div class="kicker">① Archive</div><h3>Déposer un .zip</h3>
+      <div class="drop" id="drop">Glissez une archive ici<br><small class="dim">ou cliquez — export GitHub « Download ZIP » accepté</small></div>
+      <input type="file" id="zip" accept=".zip" hidden></div>
+    <div class="card"><div class="kicker">② Dossier local</div><h3>Analyser un chemin</h3>
+      <p class="muted" style="font-size:13px">Un dossier de votre machine (avec <code>.git</code> pour l'historique).</p>
+      <div class="row"><input class="input" id="path" placeholder="/home/moi/mon-projet"><button class="btn" id="pathBtn">Analyser</button></div></div>
+    <div class="card demo"><div class="kicker">③ Démo</div><h3>Patient zéro</h3>
+      <p class="muted" style="font-size:13px">Une petite boutique en ligne, 18 commits, 4 développeurs… et beaucoup de symptômes.</p>
+      <button class="btn" id="demoBtn">🩻 Lancer l'autopsie</button></div>
+  </div>
+  <h3 style="margin-top:28px">Autopsies précédentes</h3>
+  <div id="history" class="grid g3"></div>
+</main>
+
+<!-- RÉSULTATS -->
+<main class="wrap" id="res" hidden>
+  <div class="tabs" id="tabs">
+    <div class="tab on" data-t="report">Rapport</div><div class="tab" data-t="map">Carte</div><div class="tab" data-t="hot">Points chauds</div>
+    <div class="tab" data-t="fns">Fonctions</div><div class="tab" data-t="smells">Symptômes</div><div class="tab" data-t="dups">Doublons</div>
+    <div class="tab" data-t="git">Historique</div><div class="tab" data-t="file" id="fileTab" hidden>Fichier</div>
+  </div>
+
+  <section data-p="report">
+    <div class="report-top">
+      <div class="card cert">
+        <div class="grade" id="grade"></div>
+        <div><div class="kicker">Certificat d'autopsie</div><h2 id="verdict"></h2>
+          <div class="meter" style="margin:8px 0 12px"><i id="healthBar"></i></div>
+          <div class="muted mono" id="healthTxt"></div>
+          <div class="cause"><div class="kicker">Cause probable du décès</div><ol id="causes"></ol></div></div>
+      </div>
+      <div class="grid g3 vitals" id="vitals"></div>
+    </div>
+    <div class="grid g3" style="margin-top:18px">
+      <div class="card"><div class="kicker">Langages (lignes de code)</div><canvas id="cvLang" class="ch"></canvas></div>
+      <div class="card"><div class="kicker">Symptômes par type</div><div id="kinds" style="margin-top:10px"></div></div>
+      <div class="card"><div class="kicker">Points chauds</div><div id="hotMini"></div></div>
+    </div>
+    <div class="card" style="margin-top:18px"><div class="kicker">Les fonctions les plus complexes</div><div id="worst" class="fnlist"></div></div>
+  </section>
+
+  <section data-p="map" hidden>
+    <div class="row" style="margin-bottom:12px"><span class="muted">Surface = lignes de code · couleur =</span>
+      <div class="seg" id="mapMetric"><button data-m="cc" class="on">Complexité</button><button data-m="mi">Maintenabilité</button><button data-m="churn">Modifications</button><button data-m="score">Symptômes</button><button data-m="dup">Duplication</button></div></div>
+    <div class="card" style="padding:8px"><canvas id="cvMap" style="width:100%;height:600px;display:block"></canvas></div>
+    <div id="tip" class="tip" hidden></div>
+  </section>
+
+  <section data-p="hot" hidden>
+    <div class="grid g2">
+      <div class="card"><div class="kicker">Complexité × fréquence de modification</div><p class="dim" style="font-size:12.5px;margin:6px 0 0">En haut à droite : le code complexe que tout le monde modifie. Taille = lignes, rouge = corrections de bugs.</p><canvas id="cvHot" style="width:100%;height:440px"></canvas></div>
+      <div class="card"><div class="kicker">Classement</div><div id="hotList"></div></div>
+    </div>
+  </section>
+
+  <section data-p="fns" hidden>
+    <div class="row" style="margin-bottom:10px"><input class="input" id="fnSearch" placeholder="Filtrer les fonctions…" style="max-width:320px"><label class="tog"><input type="checkbox" id="deadOnly"> Seulement le code possiblement mort</label></div>
+    <div class="card" style="padding:0"><table class="t" id="fnTable"><thead><tr><th data-k="name">Fonction</th><th data-k="path">Fichier</th><th data-k="cc">Complexité</th><th data-k="length">Lignes</th><th data-k="params">Params</th><th data-k="nest">Imbrication</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section data-p="smells" hidden>
+    <div class="row" style="margin-bottom:10px"><div class="seg" id="sevFilter"><button data-s="all" class="on">Tous</button><button data-s="crit">Critiques</button><button data-s="warn">Alertes</button><button data-s="info">Infos</button></div><select id="kindFilter" style="max-width:260px"></select></div>
+    <div id="smellList"></div>
+  </section>
+
+  <section data-p="dups" hidden><div id="dupList"></div></section>
+
+  <section data-p="git" hidden>
+    <div id="gitNone" class="empty" hidden>Pas d'historique Git : analysez un dossier contenant <code>.git</code> (les archives .zip GitHub n'en contiennent pas).</div>
+    <div id="gitBox">
+      <div class="grid g4" id="gitStats"></div>
+      <div class="grid g2" style="margin-top:18px">
+        <div class="card"><div class="kicker">Commits par semaine</div><canvas id="cvWeeks" class="ch"></canvas></div>
+        <div class="card"><div class="kicker">Auteurs</div><canvas id="cvAuthors" class="ch"></canvas></div>
+      </div>
+      <div class="grid g2" style="margin-top:18px">
+        <div class="card"><div class="kicker">Couplage caché — fichiers modifiés ensemble</div><div id="coupling"></div></div>
+        <div class="card"><div class="kicker">Facteur bus — fichiers aux mains d'une seule personne</div><div id="bus"></div></div>
+      </div>
+      <div class="card" style="margin-top:18px"><div class="kicker">Derniers commits</div><div id="commits"></div></div>
+    </div>
+  </section>
+
+  <section data-p="file" hidden>
+    <div class="file-head"><div><div class="kicker" id="fLang"></div><h2 id="fPath" class="mono"></h2></div><div class="grid g4" id="fStats" style="flex:1;max-width:640px"></div></div>
+    <div class="file-body"><div class="card code" id="code"></div><div class="card side" id="fSide"></div></div>
+  </section>
+</main>
+
+<div class="loading" id="loading" hidden><div class="scan"></div><div>Dissection en cours…</div></div>
+
+<script src="ui.js"></script><script src="charts.js"></script><script src="treemap.js"></script><script src="app.js"></script>
+</body>
+</html>
